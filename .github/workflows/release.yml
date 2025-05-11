@@ -39,11 +39,11 @@ jobs:
       - name: Prepare package
         run: |
           mkdir -p ./dist
-          cp ./target/release/EleViewr ./dist/
-          cp ./EleViewr.desktop ./dist/
+          cp ./target/release/eleviewr ./dist/
+          cp ./eleviewr.desktop ./dist/
           cp ./README.md ./dist/
           cd dist
-          tar -czvf EleViewr-${{ steps.get-version.outputs.version }}-x86_64-linux.tar.gz *
+          tar -czvf eleviewr-${{ steps.get-version.outputs.version }}-x86_64-linux.tar.gz *
       
       - name: Create GitHub Release
         id: create-release
@@ -53,7 +53,7 @@ jobs:
         with:
           tag_name: v${{ steps.get-version.outputs.version }}
           name: Release v${{ steps.get-version.outputs.version }}
-          files: ./dist/EleViewr-${{ steps.get-version.outputs.version }}-x86_64-linux.tar.gz
+          files: ./dist/eleviewr-${{ steps.get-version.outputs.version }}-x86_64-linux.tar.gz
           draft: false
           prerelease: false
           generate_release_notes: true
