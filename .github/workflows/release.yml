@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # Only run release job if PR was merged to main
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Get version from Cargo.toml
+        id: get-version
+        run: |
+          VERSION=$(grep -m1 "version = " ./Cargo.toml | cut -d '"' -f2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+      
+      - name: Build release binary
+        working-directory: ./
+        run: cargo build --release
+      
+      - name: Prepare package
+        run: |
+          mkdir -p ./dist
+          cp ./target/release/EleViewr ./dist/
+          cp ./EleViewr.desktop ./dist/
+          cp ./README.md ./dist/
+          cd dist
+          tar -czvf EleViewr-${{ steps.get-version.outputs.version }}-x86_64-linux.tar.gz *
+      
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          name: Release v${{ steps.get-version.outputs.version }}
+          files: ./dist/EleViewr-${{ steps.get-version.outputs.version }}-x86_64-linux.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
