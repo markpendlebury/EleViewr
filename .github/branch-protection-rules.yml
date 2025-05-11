@@ -1,0 +1,43 @@
+name: Branch Protection Rules
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  enforce_rules:
+    name: Enforce Branch Protection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Enforce branch protection
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.RELEASE_TOKEN }}
+          script: |
+            await github.rest.repos.updateBranchProtection({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'main',
+              required_status_checks: {
+                strict: true,
+                contexts: ['test', 'lint'] 
+              },
+              enforce_admins: false,
+              required_pull_request_reviews: {
+                required_approving_review_count: 1,
+                dismissal_restrictions: {
+                  users: ['markpendlebury']
+                },
+                dismiss_stale_reviews: true,
+                require_code_owner_reviews: true
+              },
+              restrictions: null
+            });

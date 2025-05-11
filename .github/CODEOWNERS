@@ -1,0 +1,11 @@
+# This file defines code owners for this repository
+# Owner will be automatically requested for review on all PRs
+
+# Default owner for everything in the repo
+*                   @markpendlebury
+
+# Critical files that should only be modified by the maintainer
+Cargo.toml          @markpendlebury
+Cargo.lock          @markpendlebury
+LICENSE             @markpendlebury
+.github/workflows/  @markpendlebury
