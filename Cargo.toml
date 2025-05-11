@@ -12,6 +12,6 @@ image = "0.24"           # Image loading and processing
 walkdir = "2.4"          # Directory traversal
 clap = { version = "4.4", features = ["derive"] } # Command line argument parsing
 anyhow = "1.0"           # Error handling
-wgpu = "0.17"            # Modern graphics API - version compatible with winit 0.28
+wgpu = "25.0"            # Modern graphics API - version compatible with winit 0.28
 bytemuck = { version = "1.14", features = ["derive"] } # Byte manipulation for GPU data
 pollster = "0.4"         # Async handling
