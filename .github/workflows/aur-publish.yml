@@ -48,3 +48,4 @@ jobs:
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: Update to v$(grep -m1 "version = " ./Cargo.toml | cut -d '"' -f2)
           allow_empty_commits: false
+          ssh_keyscan_types: rsa,ecdsa,ed25519
