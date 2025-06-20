@@ -15,7 +15,7 @@ use winit::{
 #[derive(Parser, Debug)]
 #[command(name = "eleviewr")]
 #[command(author = "User")]
-#[command(version = "0.1.0")]
+#[command(version = "0.3.0")]
 #[command(about = "A lightweight image viewer for Wayland/Hyprland", long_about = None)]
 struct Args {
     #[arg(help = "Image file to open (optional, defaults to current directory)")]
@@ -240,7 +240,7 @@ impl ImageViewer {
         std::thread::spawn(move || {
             // First preload the image
             match Command::new("hyprctl")
-                .args(&["hyprpaper", "preload", &image_path.to_string_lossy()])
+                .args(["hyprpaper", "preload", &image_path.to_string_lossy()])
                 .output()
             {
                 Ok(preload_output) => {
@@ -260,7 +260,7 @@ impl ImageViewer {
 
             // Then set as wallpaper for all monitors
             match Command::new("hyprctl")
-                .args(&[
+                .args([
                     "hyprpaper",
                     "wallpaper",
                     &format!(",{}", image_path.display()),
