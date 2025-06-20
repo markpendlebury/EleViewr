@@ -1,21 +1,25 @@
 name: Publish to AUR
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
+    branches:
+      - main
 
 jobs:
   aur-publish:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Generate PKGBUILD
         run: |
-          # Extract version from tag (remove 'v' prefix if present)
-          VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#v}
+          # Get version from Cargo.toml
+          VERSION=$(grep -m1 "version = " ./Cargo.toml | cut -d '"' -f2)
           
           # Download the source tarball to calculate SHA256
           wget "https://github.com/${{ github.repository }}/archive/v${VERSION}.tar.gz" -O "eleviewr-${VERSION}.tar.gz"
@@ -42,5 +46,5 @@ jobs:
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: Update to v${{ github.ref_name }}
+          commit_message: Update to v$(grep -m1 "version = " ./Cargo.toml | cut -d '"' -f2)
           allow_empty_commits: false
