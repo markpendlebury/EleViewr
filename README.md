@@ -7,6 +7,7 @@
 
 - Simple, minimalist image viewer specifically designed for Wayland/Hyprland (other platforms coming soon)
 - Set as your default image viewer to quickly preview an image
+- Ability to set current image as your desktop wallpaper with a keypress (w)
 - Use left/right or h/l to navigate through images in the same directory
 
 
@@ -51,6 +52,7 @@ eleviewr /path/to/image.jpg
 - Left Arrow or h: Previous image
 - Right Arrow or l: Next image
 - Escape: Quit
+- W: Set current image as desktop wallpaper using hyprpaper
 
 ## License
 
