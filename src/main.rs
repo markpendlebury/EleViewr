@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use image::GenericImageView;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
 use wgpu::util::DeviceExt;
@@ -10,7 +11,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use std::process::Command;
 
 #[derive(Parser, Debug)]
 #[command(name = "eleviewr")]
@@ -236,7 +236,7 @@ impl ImageViewer {
 
         let current_image = &self.images[self.current_index];
         let image_path = current_image.canonicalize()?;
-        
+
         std::thread::spawn(move || {
             // First preload the image
             match Command::new("hyprctl")
@@ -245,7 +245,10 @@ impl ImageViewer {
             {
                 Ok(preload_output) => {
                     if !preload_output.status.success() {
-                        eprintln!("Failed to preload image: {}", String::from_utf8_lossy(&preload_output.stderr));
+                        eprintln!(
+                            "Failed to preload image: {}",
+                            String::from_utf8_lossy(&preload_output.stderr)
+                        );
                         return;
                     }
                 }
@@ -257,14 +260,21 @@ impl ImageViewer {
 
             // Then set as wallpaper for all monitors
             match Command::new("hyprctl")
-                .args(&["hyprpaper", "wallpaper", &format!(",{}", image_path.display())])
+                .args(&[
+                    "hyprpaper",
+                    "wallpaper",
+                    &format!(",{}", image_path.display()),
+                ])
                 .output()
             {
                 Ok(output) => {
                     if output.status.success() {
                         println!("Wallpaper set to: {}", image_path.display());
                     } else {
-                        eprintln!("Failed to set wallpaper: {}", String::from_utf8_lossy(&output.stderr));
+                        eprintln!(
+                            "Failed to set wallpaper: {}",
+                            String::from_utf8_lossy(&output.stderr)
+                        );
                     }
                 }
                 Err(e) => {
