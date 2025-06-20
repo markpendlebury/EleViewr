@@ -15,7 +15,7 @@ use winit::{
 #[derive(Parser, Debug)]
 #[command(name = "eleviewr")]
 #[command(author = "User")]
-#[command(version = "0.1.0")]
+#[command(version = "0.3.0")]
 #[command(about = "A lightweight image viewer for Wayland/Hyprland", long_about = None)]
 struct Args {
     #[arg(help = "Image file to open (optional, defaults to current directory)")]
