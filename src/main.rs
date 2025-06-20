@@ -10,6 +10,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
+use std::process::Command;
 
 #[derive(Parser, Debug)]
 #[command(name = "eleviewr")]
@@ -226,6 +227,53 @@ impl ImageViewer {
             self.current_index - 1
         };
         self.load_image()
+    }
+
+    fn set_wallpaper(&self) -> Result<()> {
+        if self.images.is_empty() {
+            return Err(anyhow!("No images loaded"));
+        }
+
+        let current_image = &self.images[self.current_index];
+        let image_path = current_image.canonicalize()?;
+        
+        std::thread::spawn(move || {
+            // First preload the image
+            match Command::new("hyprctl")
+                .args(&["hyprpaper", "preload", &image_path.to_string_lossy()])
+                .output()
+            {
+                Ok(preload_output) => {
+                    if !preload_output.status.success() {
+                        eprintln!("Failed to preload image: {}", String::from_utf8_lossy(&preload_output.stderr));
+                        return;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error preloading image: {}", e);
+                    return;
+                }
+            }
+
+            // Then set as wallpaper for all monitors
+            match Command::new("hyprctl")
+                .args(&["hyprpaper", "wallpaper", &format!(",{}", image_path.display())])
+                .output()
+            {
+                Ok(output) => {
+                    if output.status.success() {
+                        println!("Wallpaper set to: {}", image_path.display());
+                    } else {
+                        eprintln!("Failed to set wallpaper: {}", String::from_utf8_lossy(&output.stderr));
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error setting wallpaper: {}", e);
+                }
+            }
+        });
+
+        Ok(())
     }
 }
 
@@ -558,6 +606,12 @@ fn main() -> Result<()> {
                                             // We can't update the window title directly here
                                             // since the window is already moved into the event loop
                                             println!("Previous image: {}", title);
+                                        }
+                                    }
+                                    Some(winit::event::VirtualKeyCode::W) => {
+                                        let viewer_lock = viewer.lock().unwrap();
+                                        if let Err(e) = viewer_lock.set_wallpaper() {
+                                            eprintln!("Failed to set wallpaper: {}", e);
                                         }
                                     }
                                     _ => {}
