@@ -1,5 +1,7 @@
 <div align="center">
   <img src="images/logo.png" alt="EleViewr Logo">
+  
+  [![Tests and Linting](https://github.com/markpendlebury/EleViewr/actions/workflows/test_and_linting.yml/badge.svg)](https://github.com/markpendlebury/EleViewr/actions/workflows/test_and_linting.yml) [![Release](https://github.com/markpendlebury/EleViewr/actions/workflows/release.yml/badge.svg)](https://github.com/markpendlebury/EleViewr/actions/workflows/release.yml) [![Publish to AUR](https://github.com/markpendlebury/EleViewr/actions/workflows/aur-publish.yml/badge.svg)](https://github.com/markpendlebury/EleViewr/actions/workflows/aur-publish.yml) [![AUR Version](https://img.shields.io/aur/version/eleviewr)](https://aur.archlinux.org/packages/eleviewr)
 </div>
 
 
@@ -18,17 +20,38 @@
 
 ## Installation
 
+### Arch Linux (AUR)
+
+The easiest way to install EleViewr on Arch Linux is through the AUR:
+
+#### Using yay
+```bash
+yay -S eleviewr
+```
+
+#### Using pacman with an AUR helper
+```bash
+# If you have another AUR helper like paru
+paru -S eleviewr
+```
+
+#### Manual AUR installation
+```bash
+git clone https://aur.archlinux.org/eleviewr.git
+cd eleviewr
+makepkg -si
+```
 
 ### Building from source
 
 1. Clone the repository:
-   ```
+   ```bash
    git clone https://github.com/markpendlebury/EleViewr.git
    cd EleViewr
    ```
 
 2. Manual install
-   ```
+   ```bash
    ./manual_install.sh
    ```
    This will compile and install the binary to your PATH as well as making it your default image viewer.
