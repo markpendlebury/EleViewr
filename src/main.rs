@@ -285,6 +285,39 @@ impl ImageViewer {
 
         Ok(())
     }
+
+    fn delete_image(&mut self) -> Result<()> {
+        if self.images.is_empty() {
+            return Err(anyhow!("No images loaded"));
+        }
+
+        let current_image = &self.images[self.current_index];
+        if current_image.exists() {
+            std::fs::remove_file(current_image)?;
+            println!("Deleted image: {}", current_image.display());
+
+            // Remove from the list and adjust index
+            self.images.remove(self.current_index);
+            if self.current_index >= self.images.len() && !self.images.is_empty() {
+                self.current_index = self.images.len() - 1; // Move to last image if we deleted beyond the end
+            } else if self.images.is_empty() {
+                self.current_index = 0;
+            }
+
+            // Reload the next image
+            if !self.images.is_empty() {
+                self.load_image()?;
+            } else {
+                self.image_texture = None;
+                self.texture_bind_group = None;
+                self.current_image_size = None;
+            }
+        } else {
+            return Err(anyhow!("Image file does not exist: {}", current_image.display()));
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
@@ -622,6 +655,12 @@ fn main() -> Result<()> {
                                         let viewer_lock = viewer.lock().unwrap();
                                         if let Err(e) = viewer_lock.set_wallpaper() {
                                             eprintln!("Failed to set wallpaper: {}", e);
+                                        }
+                                    }
+                                    Some(winit::event::VirtualKeyCode::D) => {
+                                        let mut viewer_lock = viewer.lock().unwrap();
+                                        if let Err(e) = viewer_lock.delete_image() {
+                                            eprintln!("Failed to delete image: {}", e);
                                         }
                                     }
                                     _ => {}
