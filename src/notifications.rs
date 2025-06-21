@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 pub enum NotificationType {
     Info,
     Success,
+    #[allow(dead_code)]
     Warning,
     Error,
 }
@@ -27,6 +28,7 @@ impl Notification {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_duration(
         message: String,
         notification_type: NotificationType,
@@ -91,6 +93,7 @@ impl NotificationManager {
         self.add_notification(Notification::new(message, NotificationType::Success));
     }
 
+    #[allow(dead_code)]
     pub fn add_warning(&mut self, message: String) {
         self.add_notification(Notification::new(message, NotificationType::Warning));
     }
@@ -108,6 +111,7 @@ impl NotificationManager {
         &self.notifications
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.notifications.clear();
     }
