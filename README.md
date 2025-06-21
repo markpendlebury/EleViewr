@@ -76,6 +76,7 @@ eleviewr /path/to/image.jpg
 - Right Arrow or l: Next image
 - Escape: Quit
 - W: Set current image as desktop wallpaper using hyprpaper
+- D: Delete currently selected image
 
 ## License
 
