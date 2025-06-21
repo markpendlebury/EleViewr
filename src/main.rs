@@ -13,13 +13,15 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod config;
 mod notifications;
+use config::ConfigManager;
 use notifications::{NotificationManager, NotificationType};
 
 #[derive(Parser, Debug)]
 #[command(name = "eleviewr")]
 #[command(author = "User")]
-#[command(version = "0.4.0")]
+#[command(version = "0.5.0")]
 #[command(about = "A lightweight image viewer for Wayland/Hyprland", long_about = None)]
 struct Args {
     #[arg(help = "Image file to open (optional, defaults to current directory)")]
@@ -61,6 +63,7 @@ struct ImageViewer {
     egui_state: egui_winit::State,
     egui_renderer: egui_wgpu::Renderer,
     notification_manager: NotificationManager,
+    config_manager: ConfigManager,
 }
 
 impl ImageViewer {
@@ -751,6 +754,10 @@ fn main() -> Result<()> {
         egui_state,
         egui_renderer,
         notification_manager: NotificationManager::new(),
+        config_manager: ConfigManager::new().unwrap_or_else(|e| {
+            eprintln!("Failed to load config: {}. Using defaults.", e);
+            ConfigManager::default()
+        }),
     }));
 
     // Load images from directory and update window
@@ -841,63 +848,65 @@ fn main() -> Result<()> {
                                 let mut viewer_lock = viewer.lock().unwrap();
                                 match viewer_lock.app_state {
                                     AppState::Normal => {
-                                        match input.virtual_keycode {
-                                            Some(winit::event::VirtualKeyCode::Escape) => {
-                                                *control_flow = ControlFlow::Exit;
-                                            }
-                                            Some(winit::event::VirtualKeyCode::Right)
-                                            | Some(winit::event::VirtualKeyCode::L) => {
-                                                if let Ok((title, _dimensions)) = viewer_lock.next_image() {
-                                                    viewer_lock.notification_manager.add_info(format!("Next image: {}", title));
-                                                }
-                                            }
-                                            Some(winit::event::VirtualKeyCode::Left)
-                                            | Some(winit::event::VirtualKeyCode::H) => {
-                                                if let Ok((title, _dimensions)) = viewer_lock.prev_image() {
-                                                    viewer_lock.notification_manager.add_info(format!("Previous image: {}", title));
-                                                }
-                                            }
-                                            Some(winit::event::VirtualKeyCode::W) => {
-                                                let _ = viewer_lock.set_wallpaper();
-                                            }
-                                            Some(winit::event::VirtualKeyCode::D) => {
-                                                if viewer_lock.skip_delete_confirmation {
-                                                    if let Err(e) = viewer_lock.delete_image() {
-                                                        viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                        if let Some(keycode) = input.virtual_keycode {
+                                            if let Some(action) = viewer_lock.config_manager.get_action_for_key(keycode) {
+                                                match action {
+                                                    "exit" => {
+                                                        *control_flow = ControlFlow::Exit;
                                                     }
-                                                } else {
-                                                    viewer_lock.show_delete_confirmation();
-                                                    viewer_lock.app_state = AppState::DeleteConfirmation;
+                                                    "next_image" => {
+                                                        if let Ok((title, _dimensions)) = viewer_lock.next_image() {
+                                                            viewer_lock.notification_manager.add_info(format!("Next image: {}", title));
+                                                        }
+                                                    }
+                                                    "previous_image" => {
+                                                        if let Ok((title, _dimensions)) = viewer_lock.prev_image() {
+                                                            viewer_lock.notification_manager.add_info(format!("Previous image: {}", title));
+                                                        }
+                                                    }
+                                                    "set_wallpaper" => {
+                                                        let _ = viewer_lock.set_wallpaper();
+                                                    }
+                                                    "delete_image" => {
+                                                        if viewer_lock.skip_delete_confirmation {
+                                                            if let Err(e) = viewer_lock.delete_image() {
+                                                                viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                                            }
+                                                        } else {
+                                                            viewer_lock.show_delete_confirmation();
+                                                            viewer_lock.app_state = AppState::DeleteConfirmation;
+                                                        }
+                                                    }
+                                                    _ => {}
                                                 }
                                             }
-                                            _ => {}
                                         }
                                     }
                                     AppState::DeleteConfirmation => {
-                                        match input.virtual_keycode {
-                                            Some(winit::event::VirtualKeyCode::Y) => {
-                                                if let Err(e) = viewer_lock.delete_image() {
-                                                    viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                        if let Some(keycode) = input.virtual_keycode {
+                                            if let Some(action) = viewer_lock.config_manager.get_action_for_key(keycode) {
+                                                match action {
+                                                    "confirm_delete" => {
+                                                        if let Err(e) = viewer_lock.delete_image() {
+                                                            viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                                        }
+                                                        viewer_lock.app_state = AppState::Normal;
+                                                    }
+                                                    "cancel_delete" => {
+                                                        viewer_lock.notification_manager.add_info("Delete cancelled.".to_string());
+                                                        viewer_lock.app_state = AppState::Normal;
+                                                    }
+                                                    "always_delete" => {
+                                                        viewer_lock.skip_delete_confirmation = true;
+                                                        if let Err(e) = viewer_lock.delete_image() {
+                                                            viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                                        }
+                                                        viewer_lock.app_state = AppState::Normal;
+                                                        viewer_lock.notification_manager.add_success("Delete confirmation disabled for this session.".to_string());
+                                                    }
+                                                    _ => {}
                                                 }
-                                                viewer_lock.app_state = AppState::Normal;
                                             }
-                                            Some(winit::event::VirtualKeyCode::N) => {
-                                                viewer_lock.notification_manager.add_info("Delete cancelled.".to_string());
-                                                viewer_lock.app_state = AppState::Normal;
-                                            }
-                                            Some(winit::event::VirtualKeyCode::A) => {
-                                                viewer_lock.skip_delete_confirmation = true;
-                                                if let Err(e) = viewer_lock.delete_image() {
-                                                    viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
-                                                }
-                                                viewer_lock.app_state = AppState::Normal;
-                                                viewer_lock.notification_manager.add_success("Delete confirmation disabled for this session.".to_string());
-                                            }
-                                            Some(winit::event::VirtualKeyCode::Escape) => {
-                                                viewer_lock.notification_manager.add_info("Delete cancelled.".to_string());
-                                                viewer_lock.app_state = AppState::Normal;
-                                            }
-                                            _ => {}
                                         }
                                     }
                                 }
