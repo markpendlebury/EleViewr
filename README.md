@@ -32,7 +32,7 @@ yay -S eleviewr
 #### Using pacman with an AUR helper
 ```bash
 # If you have another AUR helper like paru
-paru -S eleviewr
+pacman -S eleviewr
 ```
 
 #### Manual AUR installation
@@ -77,6 +77,46 @@ eleviewr /path/to/image.jpg
 - Escape: Quit
 - W: Set current image as desktop wallpaper using hyprpaper
 - D: Delete currently selected image
+
+### Configuration
+
+EleViewr supports customizable keybindings through a TOML configuration file located at `~/.config/eleviewr/config.toml`. The configuration file is automatically created on first run with default settings.
+
+#### Default Configuration
+
+```toml
+[keybinds]
+PreviousImage = "h, Left"
+NextImage = "l, Right"
+Exit = "Escape"
+SetWallpaper = "W"
+DeleteImage = "D"
+ConfirmDelete = "Y"
+CancelDelete = "N, Escape"
+AlwaysDelete = "A"
+```
+
+#### Customizing Keybindings
+
+You can edit the configuration file to customize keybindings according to your preferences:
+
+1. Open the config file: `~/.config/eleviewr/config.toml`
+2. Modify the key values using comma-separated key names
+3. Save the file - changes take effect on next application start
+
+#### Supported Key Names
+
+- Letter keys: `a-z`, `A-Z`
+- Arrow keys: `Left`, `Right`, `Up`, `Down` (or `LArrow`, `RArrow`, etc.)
+- Special keys: `Escape`, `Space`, `Enter`, `Tab`, `Backspace`, `Delete`
+- Function keys: `Home`, `End`, `PageUp`, `PageDown`
+
+#### Delete Confirmation Keys
+
+When deleting an image, you'll see a confirmation prompt with these options:
+- **Y**: Confirm deletion
+- **N** or **Escape**: Cancel deletion  
+- **A**: Always delete (skip confirmation for current session)
 
 ## License
 
