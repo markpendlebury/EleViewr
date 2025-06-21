@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use image::GenericImageView;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -12,10 +13,13 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod notifications;
+use notifications::{NotificationManager, NotificationType};
+
 #[derive(Parser, Debug)]
 #[command(name = "eleviewr")]
 #[command(author = "User")]
-#[command(version = "0.3.0")]
+#[command(version = "0.4.0")]
 #[command(about = "A lightweight image viewer for Wayland/Hyprland", long_about = None)]
 struct Args {
     #[arg(help = "Image file to open (optional, defaults to current directory)")]
@@ -29,6 +33,12 @@ struct Uniforms {
     image_aspect: f32,
     scale_factor: f32,
     _padding: f32,
+}
+
+#[derive(Clone)]
+enum AppState {
+    Normal,
+    DeleteConfirmation,
 }
 
 struct ImageViewer {
@@ -45,9 +55,122 @@ struct ImageViewer {
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     current_image_size: Option<(u32, u32)>,
+    app_state: AppState,
+    skip_delete_confirmation: bool,
+    egui_ctx: egui::Context,
+    egui_state: egui_winit::State,
+    egui_renderer: egui_wgpu::Renderer,
+    notification_manager: NotificationManager,
 }
 
 impl ImageViewer {
+    fn show_delete_confirmation(&mut self) {
+        self.notification_manager.add_info("Delete confirmation: y=Yes, n=No, a=Don't ask again".to_string());
+    }
+
+    fn render_ui(&mut self, size: winit::dpi::PhysicalSize<u32>) -> (Vec<egui::ClippedPrimitive>, egui::TexturesDelta) {
+        self.notification_manager.update();
+        
+        let raw_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::Vec2::new(size.width as f32, size.height as f32),
+            )),
+            time: Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64()),
+            ..Default::default()
+        };
+
+        // Get a reference to notifications first to avoid borrow conflicts
+        let notifications = self.notification_manager.get_notifications().clone();
+        let app_state = self.app_state.clone();
+
+        let full_output = self.egui_ctx.run(raw_input, |ctx| {
+            Self::render_notifications_static(ctx, &notifications);
+            Self::render_delete_confirmation_static(ctx, &app_state);
+        });
+
+        let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes);
+        (clipped_primitives, full_output.textures_delta)
+    }
+
+    fn render_notifications_static(ctx: &egui::Context, notifications: &VecDeque<notifications::Notification>) {
+        for (i, notification) in notifications.iter().enumerate() {
+            let opacity = notification.opacity();
+            if opacity <= 0.0 {
+                continue;
+            }
+
+            egui::Window::new(&format!("notification_{}", i))
+                .title_bar(false)
+                .resizable(false)
+                .movable(false)
+                .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::new(-20.0, 20.0 + (i as f32 * 80.0)))
+                .fixed_size(egui::Vec2::new(300.0, 60.0))
+                .frame(Self::get_notification_frame_static(&notification.notification_type, opacity))
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        match notification.notification_type {
+                            NotificationType::Info => ui.label("ℹ"),
+                            NotificationType::Success => ui.label("✓"),
+                            NotificationType::Warning => ui.label("⚠"),
+                            NotificationType::Error => ui.label("✗"),
+                        };
+                        
+                        ui.label(&notification.message);
+                    });
+                });
+        }
+    }
+
+    fn render_delete_confirmation_static(ctx: &egui::Context, app_state: &AppState) {
+        if matches!(app_state, AppState::DeleteConfirmation) {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none().fill(egui::Color32::from_black_alpha(180)))
+                .show(ctx, |ui| {
+                    ui.centered_and_justified(|ui| {
+                        egui::Frame::window(&ctx.style())
+                            .fill(egui::Color32::from_gray(40))
+                            .stroke(egui::Stroke::new(2.0, egui::Color32::RED))
+                            .inner_margin(egui::Margin::same(20.0))
+                            .show(ui, |ui| {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(10.0);
+                                    ui.label(egui::RichText::new("⚠ DELETE CONFIRMATION").size(18.0).color(egui::Color32::WHITE));
+                                    ui.add_space(15.0);
+                                    ui.label(egui::RichText::new("Are you sure you want to delete this image?").size(14.0).color(egui::Color32::LIGHT_GRAY));
+                                    ui.add_space(20.0);
+                                    
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("Y").color(egui::Color32::GREEN).strong());
+                                        ui.label("Yes");
+                                        ui.add_space(20.0);
+                                        ui.label(egui::RichText::new("N").color(egui::Color32::RED).strong());
+                                        ui.label("No");
+                                        ui.add_space(20.0);
+                                        ui.label(egui::RichText::new("A").color(egui::Color32::YELLOW).strong());
+                                        ui.label("Don't ask again");
+                                    });
+                                });
+                            });
+                    });
+                });
+        }
+    }
+
+    fn get_notification_frame_static(notification_type: &NotificationType, opacity: f32) -> egui::Frame {
+        let (bg_color, border_color) = match notification_type {
+            NotificationType::Info => (egui::Color32::from_rgba_premultiplied(30, 144, 255, (180.0 * opacity) as u8), egui::Color32::BLUE),
+            NotificationType::Success => (egui::Color32::from_rgba_premultiplied(0, 128, 0, (180.0 * opacity) as u8), egui::Color32::GREEN),
+            NotificationType::Warning => (egui::Color32::from_rgba_premultiplied(255, 165, 0, (180.0 * opacity) as u8), egui::Color32::YELLOW),
+            NotificationType::Error => (egui::Color32::from_rgba_premultiplied(220, 20, 60, (180.0 * opacity) as u8), egui::Color32::RED),
+        };
+        
+        egui::Frame::default()
+            .fill(bg_color)
+            .stroke(egui::Stroke::new(2.0, border_color))
+            .rounding(egui::Rounding::same(8.0))
+            .inner_margin(egui::Margin::same(10.0))
+    }
     fn load_images_in_directory(&mut self, path: &Path) -> Result<()> {
         self.images.clear();
 
@@ -113,7 +236,7 @@ impl ImageViewer {
         }
 
         let img_path = &self.images[self.current_index];
-        println!("Loading image: {}", img_path.display());
+        self.notification_manager.add_info(format!("Loading image: {}", img_path.display()));
 
         let img = image::open(img_path)?;
         let dimensions = img.dimensions();
@@ -229,7 +352,7 @@ impl ImageViewer {
         self.load_image()
     }
 
-    fn set_wallpaper(&self) -> Result<()> {
+    fn set_wallpaper(&mut self) -> Result<()> {
         if self.images.is_empty() {
             return Err(anyhow!("No images loaded"));
         }
@@ -237,51 +360,56 @@ impl ImageViewer {
         let current_image = &self.images[self.current_index];
         let image_path = current_image.canonicalize()?;
 
-        std::thread::spawn(move || {
-            // First preload the image
-            match Command::new("hyprctl")
-                .args(["hyprpaper", "preload", &image_path.to_string_lossy()])
-                .output()
-            {
-                Ok(preload_output) => {
-                    if !preload_output.status.success() {
-                        eprintln!(
-                            "Failed to preload image: {}",
-                            String::from_utf8_lossy(&preload_output.stderr)
-                        );
-                        return;
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error preloading image: {}", e);
-                    return;
+        // First preload the image
+        match Command::new("hyprctl")
+            .args(["hyprpaper", "preload", &image_path.to_string_lossy()])
+            .output()
+        {
+            Ok(preload_output) => {
+                if !preload_output.status.success() {
+                    let error_msg = format!(
+                        "Failed to preload image: {}",
+                        String::from_utf8_lossy(&preload_output.stderr)
+                    );
+                    self.notification_manager.add_error(error_msg.clone());
+                    return Err(anyhow!(error_msg));
                 }
             }
+            Err(e) => {
+                let error_msg = format!("Error preloading image: {}", e);
+                self.notification_manager.add_error(error_msg.clone());
+                return Err(anyhow!(error_msg));
+            }
+        }
 
-            // Then set as wallpaper for all monitors
-            match Command::new("hyprctl")
-                .args([
-                    "hyprpaper",
-                    "wallpaper",
-                    &format!(",{}", image_path.display()),
-                ])
-                .output()
-            {
-                Ok(output) => {
-                    if output.status.success() {
-                        println!("Wallpaper set to: {}", image_path.display());
-                    } else {
-                        eprintln!(
-                            "Failed to set wallpaper: {}",
-                            String::from_utf8_lossy(&output.stderr)
-                        );
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error setting wallpaper: {}", e);
+        // Then set as wallpaper for all monitors
+        match Command::new("hyprctl")
+            .args([
+                "hyprpaper",
+                "wallpaper",
+                &format!(",{}", image_path.display()),
+            ])
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    let success_msg = format!("Wallpaper set to: {}", image_path.display());
+                    self.notification_manager.add_success(success_msg);
+                } else {
+                    let error_msg = format!(
+                        "Failed to set wallpaper: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                    self.notification_manager.add_error(error_msg.clone());
+                    return Err(anyhow!(error_msg));
                 }
             }
-        });
+            Err(e) => {
+                let error_msg = format!("Error setting wallpaper: {}", e);
+                self.notification_manager.add_error(error_msg.clone());
+                return Err(anyhow!(error_msg));
+            }
+        }
 
         Ok(())
     }
@@ -294,7 +422,7 @@ impl ImageViewer {
         let current_image = &self.images[self.current_index];
         if current_image.exists() {
             std::fs::remove_file(current_image)?;
-            println!("Deleted image: {}", current_image.display());
+            self.notification_manager.add_success(format!("Deleted image: {}", current_image.display()));
 
             // Remove from the list and adjust index
             self.images.remove(self.current_index);
@@ -536,6 +664,12 @@ fn main() -> Result<()> {
         ],
     });
 
+    // Initialize egui
+    let egui_ctx = egui::Context::default();
+    let mut egui_state = egui_winit::State::new(&window);
+    egui_state.set_pixels_per_point(window.scale_factor() as f32);
+    let egui_renderer = egui_wgpu::Renderer::new(&device, surface_format, None, 1);
+
     // Create the ImageViewer with the components we've initialized
     let viewer = Arc::new(Mutex::new(ImageViewer {
         images: Vec::new(),
@@ -551,6 +685,12 @@ fn main() -> Result<()> {
         uniform_buffer,
         uniform_bind_group,
         current_image_size: None,
+        app_state: AppState::Normal,
+        skip_delete_confirmation: false,
+        egui_ctx,
+        egui_state,
+        egui_renderer,
+        notification_manager: NotificationManager::new(),
     }));
 
     // Load images from directory and update window
@@ -591,6 +731,15 @@ fn main() -> Result<()> {
         match event {
             Event::WindowEvent { window_id, event } => {
                 if window_id == win_id {
+                    // Handle egui events first
+                    {
+                        let mut viewer_lock = viewer.lock().unwrap();
+                        let ctx = viewer_lock.egui_ctx.clone();
+                        let response = viewer_lock.egui_state.on_event(&ctx, &event);
+                        if response.consumed {
+                            return;
+                        }
+                    }
                     match event {
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
@@ -629,41 +778,69 @@ fn main() -> Result<()> {
                         }
                         WindowEvent::KeyboardInput { input, .. } => {
                             if input.state == ElementState::Pressed {
-                                match input.virtual_keycode {
-                                    Some(winit::event::VirtualKeyCode::Escape) => {
-                                        *control_flow = ControlFlow::Exit;
-                                    }
-                                    Some(winit::event::VirtualKeyCode::Right)
-                                    | Some(winit::event::VirtualKeyCode::L) => {
-                                        let mut viewer_lock = viewer.lock().unwrap();
-                                        if let Ok((title, _dimensions)) = viewer_lock.next_image() {
-                                            // We can't update the window title directly here
-                                            // since the window is already moved into the event loop
-                                            println!("Next image: {}", title);
+                                let mut viewer_lock = viewer.lock().unwrap();
+                                
+                                match viewer_lock.app_state {
+                                    AppState::Normal => {
+                                        match input.virtual_keycode {
+                                            Some(winit::event::VirtualKeyCode::Escape) => {
+                                                *control_flow = ControlFlow::Exit;
+                                            }
+                                            Some(winit::event::VirtualKeyCode::Right)
+                                            | Some(winit::event::VirtualKeyCode::L) => {
+                                                if let Ok((title, _dimensions)) = viewer_lock.next_image() {
+                                                    viewer_lock.notification_manager.add_info(format!("Next image: {}", title));
+                                                }
+                                            }
+                                            Some(winit::event::VirtualKeyCode::Left)
+                                            | Some(winit::event::VirtualKeyCode::H) => {
+                                                if let Ok((title, _dimensions)) = viewer_lock.prev_image() {
+                                                    viewer_lock.notification_manager.add_info(format!("Previous image: {}", title));
+                                                }
+                                            }
+                                            Some(winit::event::VirtualKeyCode::W) => {
+                                                let _ = viewer_lock.set_wallpaper();
+                                            }
+                                            Some(winit::event::VirtualKeyCode::D) => {
+                                                if viewer_lock.skip_delete_confirmation {
+                                                    if let Err(e) = viewer_lock.delete_image() {
+                                                        viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                                    }
+                                                } else {
+                                                    viewer_lock.show_delete_confirmation();
+                                                    viewer_lock.app_state = AppState::DeleteConfirmation;
+                                                }
+                                            }
+                                            _ => {}
                                         }
                                     }
-                                    Some(winit::event::VirtualKeyCode::Left)
-                                    | Some(winit::event::VirtualKeyCode::H) => {
-                                        let mut viewer_lock = viewer.lock().unwrap();
-                                        if let Ok((title, _dimensions)) = viewer_lock.prev_image() {
-                                            // We can't update the window title directly here
-                                            // since the window is already moved into the event loop
-                                            println!("Previous image: {}", title);
+                                    AppState::DeleteConfirmation => {
+                                        match input.virtual_keycode {
+                                            Some(winit::event::VirtualKeyCode::Y) => {
+                                                if let Err(e) = viewer_lock.delete_image() {
+                                                    viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                                }
+                                                viewer_lock.app_state = AppState::Normal;
+                                            }
+                                            Some(winit::event::VirtualKeyCode::N) => {
+                                                viewer_lock.notification_manager.add_info("Delete cancelled.".to_string());
+                                                viewer_lock.app_state = AppState::Normal;
+                                            }
+                                            Some(winit::event::VirtualKeyCode::A) => {
+                                                viewer_lock.skip_delete_confirmation = true;
+                                                if let Err(e) = viewer_lock.delete_image() {
+                                                    viewer_lock.notification_manager.add_error(format!("Failed to delete image: {}", e));
+                                                }
+                                                viewer_lock.app_state = AppState::Normal;
+                                                viewer_lock.notification_manager.add_success("Delete confirmation disabled for this session.".to_string());
+                                            }
+                                            Some(winit::event::VirtualKeyCode::Escape) => {
+                                                viewer_lock.notification_manager.add_info("Delete cancelled.".to_string());
+                                                viewer_lock.app_state = AppState::Normal;
+                                            }
+                                            _ => {}
                                         }
                                     }
-                                    Some(winit::event::VirtualKeyCode::W) => {
-                                        let viewer_lock = viewer.lock().unwrap();
-                                        if let Err(e) = viewer_lock.set_wallpaper() {
-                                            eprintln!("Failed to set wallpaper: {}", e);
-                                        }
-                                    }
-                                    Some(winit::event::VirtualKeyCode::D) => {
-                                        let mut viewer_lock = viewer.lock().unwrap();
-                                        if let Err(e) = viewer_lock.delete_image() {
-                                            eprintln!("Failed to delete image: {}", e);
-                                        }
-                                    }
-                                    _ => {}
                                 }
                             }
                         }
@@ -676,7 +853,6 @@ fn main() -> Result<()> {
             }
             Event::RedrawRequested(_) => {
                 // Render the current frame
-                let viewer_lock = viewer.lock().unwrap();
                 let output = match surface.get_current_texture() {
                     Ok(output) => output,
                     Err(_) => return,
@@ -686,47 +862,98 @@ fn main() -> Result<()> {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                let mut encoder =
-                    viewer_lock
+                // Create command encoder and render primitives outside viewer lock
+                let (clipped_primitives, textures_delta, mut encoder) = {
+                    let mut viewer_lock = viewer.lock().unwrap();
+                    
+                    // Render UI and get primitives
+                    let (clipped_primitives, textures_delta) = viewer_lock.render_ui(window.inner_size());
+                    
+                    let encoder = viewer_lock
                         .device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("Render Encoder"),
                         });
-
+                    
+                    (clipped_primitives, textures_delta, encoder)
+                };
+                
+                // Now handle rendering with a fresh viewer lock
                 {
-                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Render Pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: 0.1,
-                                    g: 0.1,
-                                    b: 0.1,
-                                    a: 1.0,
-                                }),
-                                store: true,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                    });
+                    let mut viewer_lock = viewer.lock().unwrap();
 
-                    render_pass.set_pipeline(&viewer_lock.render_pipeline);
+                    // First render the main image
+                    {
+                        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("Render Pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                                        r: 0.1,
+                                        g: 0.1,
+                                        b: 0.1,
+                                        a: 1.0,
+                                    }),
+                                    store: true,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                        });
 
-                    // Only draw the image if we have a bind group (i.e., an image loaded)
-                    if let Some(bind_group) = &viewer_lock.texture_bind_group {
-                        // Use the texture bind group for rendering
-                        render_pass.set_bind_group(0, bind_group, &[]);
-                        render_pass.draw(0..6, 0..1);
-                    } else {
-                        // Use the default uniform bind group if no image is loaded
-                        render_pass.set_bind_group(0, &viewer_lock.uniform_bind_group, &[]);
-                        render_pass.draw(0..6, 0..1);
+                        render_pass.set_pipeline(&viewer_lock.render_pipeline);
+
+                        // Only draw the image if we have a bind group (i.e., an image loaded)
+                        if let Some(bind_group) = &viewer_lock.texture_bind_group {
+                            // Use the texture bind group for rendering
+                            render_pass.set_bind_group(0, bind_group, &[]);
+                            render_pass.draw(0..6, 0..1);
+                        } else {
+                            // Use the default uniform bind group if no image is loaded
+                            render_pass.set_bind_group(0, &viewer_lock.uniform_bind_group, &[]);
+                            render_pass.draw(0..6, 0..1);
+                        }
                     }
-                }
 
-                viewer_lock.queue.submit(std::iter::once(encoder.finish()));
+                    // Update egui textures and render UI overlay
+                    let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
+                        size_in_pixels: [window.inner_size().width, window.inner_size().height],
+                        pixels_per_point: window.scale_factor() as f32,
+                    };
+
+                    // Extract device and queue references to avoid borrow conflicts
+                    let device_ptr = &viewer_lock.device as *const wgpu::Device;
+                    let queue_ptr = &viewer_lock.queue as *const wgpu::Queue;
+                    let device_ref = unsafe { &*device_ptr };
+                    let queue_ref = unsafe { &*queue_ptr };
+
+                    for (id, image_delta) in &textures_delta.set {
+                        viewer_lock.egui_renderer.update_texture(device_ref, queue_ref, *id, image_delta);
+                    }
+
+                    viewer_lock.egui_renderer.update_buffers(device_ref, queue_ref, &mut encoder, &clipped_primitives, &screen_descriptor);
+
+                    {
+                        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("egui render pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: true,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                        });
+
+                        viewer_lock.egui_renderer.render(&mut render_pass, &clipped_primitives, &screen_descriptor);
+                    }
+
+                    viewer_lock.queue.submit(std::iter::once(encoder.finish()));
+                }
+                
                 output.present();
             }
             _ => {}

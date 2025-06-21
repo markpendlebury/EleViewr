@@ -1,6 +1,6 @@
 [package]
 name = "eleviewr"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "A lightweight image viewer for Wayland/Hyprland"
 authors = ["Mark Pendlebury"]
@@ -12,6 +12,9 @@ image = "0.24"           # Image loading and processing
 walkdir = "2.4"          # Directory traversal
 clap = { version = "4.4", features = ["derive"] } # Command line argument parsing
 anyhow = "1.0"           # Error handling
-wgpu = "0.17"            # Modern graphics API - version compatible with winit 0.28
+wgpu = "0.16"            # Modern graphics API - version compatible with egui-wgpu 0.22
 bytemuck = { version = "1.14", features = ["derive"] } # Byte manipulation for GPU data
 pollster = "0.4"         # Async handling
+egui = "0.22"            # Immediate mode GUI
+egui-wgpu = "0.22"       # WGPU backend for egui
+egui-winit = "0.22"      # Winit integration for egui
