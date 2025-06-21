@@ -27,7 +27,11 @@ impl Notification {
         }
     }
 
-    pub fn with_duration(message: String, notification_type: NotificationType, duration: Duration) -> Self {
+    pub fn with_duration(
+        message: String,
+        notification_type: NotificationType,
+        duration: Duration,
+    ) -> Self {
         Self {
             message,
             notification_type,
@@ -44,7 +48,7 @@ impl Notification {
         let elapsed = self.created_at.elapsed();
         let total_secs = self.duration.as_secs_f32();
         let elapsed_secs = elapsed.as_secs_f32();
-        
+
         if elapsed_secs < 0.5 {
             // Fade in over first 0.5 seconds
             elapsed_secs / 0.5
@@ -72,7 +76,7 @@ impl NotificationManager {
 
     pub fn add_notification(&mut self, notification: Notification) {
         self.notifications.push_back(notification);
-        
+
         // Remove old notifications if we exceed the limit
         while self.notifications.len() > self.max_notifications {
             self.notifications.pop_front();

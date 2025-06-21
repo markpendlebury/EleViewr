@@ -65,18 +65,27 @@ struct ImageViewer {
 
 impl ImageViewer {
     fn show_delete_confirmation(&mut self) {
-        self.notification_manager.add_info("Delete confirmation: y=Yes, n=No, a=Don't ask again".to_string());
+        self.notification_manager
+            .add_info("Delete confirmation: y=Yes, n=No, a=Don't ask again".to_string());
     }
 
-    fn render_ui(&mut self, size: winit::dpi::PhysicalSize<u32>) -> (Vec<egui::ClippedPrimitive>, egui::TexturesDelta) {
+    fn render_ui(
+        &mut self,
+        size: winit::dpi::PhysicalSize<u32>,
+    ) -> (Vec<egui::ClippedPrimitive>, egui::TexturesDelta) {
         self.notification_manager.update();
-        
+
         let raw_input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
                 egui::Vec2::new(size.width as f32, size.height as f32),
             )),
-            time: Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64()),
+            time: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64(),
+            ),
             ..Default::default()
         };
 
@@ -93,7 +102,10 @@ impl ImageViewer {
         (clipped_primitives, full_output.textures_delta)
     }
 
-    fn render_notifications_static(ctx: &egui::Context, notifications: &VecDeque<notifications::Notification>) {
+    fn render_notifications_static(
+        ctx: &egui::Context,
+        notifications: &VecDeque<notifications::Notification>,
+    ) {
         for (i, notification) in notifications.iter().enumerate() {
             let opacity = notification.opacity();
             if opacity <= 0.0 {
@@ -104,9 +116,15 @@ impl ImageViewer {
                 .title_bar(false)
                 .resizable(false)
                 .movable(false)
-                .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::new(-20.0, 20.0 + (i as f32 * 80.0)))
+                .anchor(
+                    egui::Align2::RIGHT_TOP,
+                    egui::Vec2::new(-20.0, 20.0 + (i as f32 * 80.0)),
+                )
                 .fixed_size(egui::Vec2::new(300.0, 60.0))
-                .frame(Self::get_notification_frame_static(&notification.notification_type, opacity))
+                .frame(Self::get_notification_frame_static(
+                    &notification.notification_type,
+                    opacity,
+                ))
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         match notification.notification_type {
@@ -115,7 +133,7 @@ impl ImageViewer {
                             NotificationType::Warning => ui.label("⚠"),
                             NotificationType::Error => ui.label("✗"),
                         };
-                        
+
                         ui.label(&notification.message);
                     });
                 });
@@ -135,19 +153,41 @@ impl ImageViewer {
                             .show(ui, |ui| {
                                 ui.vertical_centered(|ui| {
                                     ui.add_space(10.0);
-                                    ui.label(egui::RichText::new("⚠ DELETE CONFIRMATION").size(18.0).color(egui::Color32::WHITE));
+                                    ui.label(
+                                        egui::RichText::new("⚠ DELETE CONFIRMATION")
+                                            .size(18.0)
+                                            .color(egui::Color32::WHITE),
+                                    );
                                     ui.add_space(15.0);
-                                    ui.label(egui::RichText::new("Are you sure you want to delete this image?").size(14.0).color(egui::Color32::LIGHT_GRAY));
+                                    ui.label(
+                                        egui::RichText::new(
+                                            "Are you sure you want to delete this image?",
+                                        )
+                                        .size(14.0)
+                                        .color(egui::Color32::LIGHT_GRAY),
+                                    );
                                     ui.add_space(20.0);
-                                    
+
                                     ui.horizontal(|ui| {
-                                        ui.label(egui::RichText::new("Y").color(egui::Color32::GREEN).strong());
+                                        ui.label(
+                                            egui::RichText::new("Y")
+                                                .color(egui::Color32::GREEN)
+                                                .strong(),
+                                        );
                                         ui.label("Yes");
                                         ui.add_space(20.0);
-                                        ui.label(egui::RichText::new("N").color(egui::Color32::RED).strong());
+                                        ui.label(
+                                            egui::RichText::new("N")
+                                                .color(egui::Color32::RED)
+                                                .strong(),
+                                        );
                                         ui.label("No");
                                         ui.add_space(20.0);
-                                        ui.label(egui::RichText::new("A").color(egui::Color32::YELLOW).strong());
+                                        ui.label(
+                                            egui::RichText::new("A")
+                                                .color(egui::Color32::YELLOW)
+                                                .strong(),
+                                        );
                                         ui.label("Don't ask again");
                                     });
                                 });
@@ -157,14 +197,29 @@ impl ImageViewer {
         }
     }
 
-    fn get_notification_frame_static(notification_type: &NotificationType, opacity: f32) -> egui::Frame {
+    fn get_notification_frame_static(
+        notification_type: &NotificationType,
+        opacity: f32,
+    ) -> egui::Frame {
         let (bg_color, border_color) = match notification_type {
-            NotificationType::Info => (egui::Color32::from_rgba_premultiplied(30, 144, 255, (180.0 * opacity) as u8), egui::Color32::BLUE),
-            NotificationType::Success => (egui::Color32::from_rgba_premultiplied(0, 128, 0, (180.0 * opacity) as u8), egui::Color32::GREEN),
-            NotificationType::Warning => (egui::Color32::from_rgba_premultiplied(255, 165, 0, (180.0 * opacity) as u8), egui::Color32::YELLOW),
-            NotificationType::Error => (egui::Color32::from_rgba_premultiplied(220, 20, 60, (180.0 * opacity) as u8), egui::Color32::RED),
+            NotificationType::Info => (
+                egui::Color32::from_rgba_premultiplied(30, 144, 255, (180.0 * opacity) as u8),
+                egui::Color32::BLUE,
+            ),
+            NotificationType::Success => (
+                egui::Color32::from_rgba_premultiplied(0, 128, 0, (180.0 * opacity) as u8),
+                egui::Color32::GREEN,
+            ),
+            NotificationType::Warning => (
+                egui::Color32::from_rgba_premultiplied(255, 165, 0, (180.0 * opacity) as u8),
+                egui::Color32::YELLOW,
+            ),
+            NotificationType::Error => (
+                egui::Color32::from_rgba_premultiplied(220, 20, 60, (180.0 * opacity) as u8),
+                egui::Color32::RED,
+            ),
         };
-        
+
         egui::Frame::default()
             .fill(bg_color)
             .stroke(egui::Stroke::new(2.0, border_color))
@@ -236,7 +291,8 @@ impl ImageViewer {
         }
 
         let img_path = &self.images[self.current_index];
-        self.notification_manager.add_info(format!("Loading image: {}", img_path.display()));
+        self.notification_manager
+            .add_info(format!("Loading image: {}", img_path.display()));
 
         let img = image::open(img_path)?;
         let dimensions = img.dimensions();
@@ -422,7 +478,8 @@ impl ImageViewer {
         let current_image = &self.images[self.current_index];
         if current_image.exists() {
             std::fs::remove_file(current_image)?;
-            self.notification_manager.add_success(format!("Deleted image: {}", current_image.display()));
+            self.notification_manager
+                .add_success(format!("Deleted image: {}", current_image.display()));
 
             // Remove from the list and adjust index
             self.images.remove(self.current_index);
@@ -441,7 +498,10 @@ impl ImageViewer {
                 self.current_image_size = None;
             }
         } else {
-            return Err(anyhow!("Image file does not exist: {}", current_image.display()));
+            return Err(anyhow!(
+                "Image file does not exist: {}",
+                current_image.display()
+            ));
         }
 
         Ok(())
