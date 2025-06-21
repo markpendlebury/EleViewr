@@ -112,7 +112,7 @@ impl ImageViewer {
                 continue;
             }
 
-            egui::Window::new(&format!("notification_{}", i))
+            egui::Window::new(format!("notification_{}", i))
                 .title_bar(false)
                 .resizable(false)
                 .movable(false)
@@ -839,7 +839,6 @@ fn main() -> Result<()> {
                         WindowEvent::KeyboardInput { input, .. } => {
                             if input.state == ElementState::Pressed {
                                 let mut viewer_lock = viewer.lock().unwrap();
-                                
                                 match viewer_lock.app_state {
                                     AppState::Normal => {
                                         match input.virtual_keycode {
@@ -925,19 +924,15 @@ fn main() -> Result<()> {
                 // Create command encoder and render primitives outside viewer lock
                 let (clipped_primitives, textures_delta, mut encoder) = {
                     let mut viewer_lock = viewer.lock().unwrap();
-                    
                     // Render UI and get primitives
                     let (clipped_primitives, textures_delta) = viewer_lock.render_ui(window.inner_size());
-                    
                     let encoder = viewer_lock
                         .device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("Render Encoder"),
                         });
-                    
                     (clipped_primitives, textures_delta, encoder)
                 };
-                
                 // Now handle rendering with a fresh viewer lock
                 {
                     let mut viewer_lock = viewer.lock().unwrap();
@@ -1013,7 +1008,6 @@ fn main() -> Result<()> {
 
                     viewer_lock.queue.submit(std::iter::once(encoder.finish()));
                 }
-                
                 output.present();
             }
             _ => {}
